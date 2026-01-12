@@ -116,6 +116,9 @@ async def materials_page(request: Request, db = Depends(get_db)):
     for doc in docs:
         material = document_to_dict(doc)
         if material:
+            # Ensure type field exists (default to empty string if missing)
+            if "type" not in material:
+                material["type"] = ""
             materials.append(material)
     return templates.TemplateResponse("materials.html", {"request": request, "materials": materials})
 
