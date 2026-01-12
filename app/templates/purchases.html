@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Purchases - Ethera Jewelry{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Purchases</h1>
+        <p class="meta">Track inventory purchases and costs</p>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+        <a href="/purchases/export/excel" class="btn btn-secondary">Export to Excel</a>
+        <a href="/purchases/new" class="btn">Add Purchase</a>
+    </div>
+</div>
+
+{% if purchases %}
+<table>
+    <thead>
+        <tr>
+            <th>Material</th>
+            <th>Supplier</th>
+            <th>Date</th>
+            <th>Qty Purchased</th>
+            <th>Unit Cost</th>
+            <th>Currency</th>
+            <th style="text-align: right;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for purchase in purchases %}
+        <tr>
+            <td><strong>{{ purchase.material_name }}</strong></td>
+            <td>{{ purchase.supplier_name }}</td>
+            <td class="meta">{{ purchase.purchase_date.strftime('%Y-%m-%d') }}</td>
+            <td>{{ purchase.qty_purchased }} <span class="meta">{{ purchase.material.unit if purchase.material else '' }}</span></td>
+            <td><strong>{{ purchase.unit_cost }}</strong></td>
+            <td class="meta">{{ purchase.currency }}</td>
+            <td style="text-align: right;">
+                <a href="/purchases/{{ purchase.id }}/edit" class="link">Edit</a>
+                <span style="margin: 0 8px; color: #e5e5e5;">|</span>
+                <form method="POST" action="/purchases/{{ purchase.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this purchase?');">
+                    <button type="submit" class="btn btn-danger" style="padding: 4px 12px; font-size: 13px;">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No purchases found.</p>
+    <p style="margin-top: 16px;"><a href="/purchases/new" class="link">Add your first purchase</a></p>
+</div>
+{% endif %}
+{% endblock %}

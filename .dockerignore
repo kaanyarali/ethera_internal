@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# Environment files
+.env
+.env.local
+
+# Firebase credentials (not needed in container)
+*.json
+!package.json
+firebase-credentials.json
+*-firebase-adminsdk-*.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Alembic (not needed for Firestore)
+alembic/
+alembic.ini

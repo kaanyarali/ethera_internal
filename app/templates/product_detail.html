@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - Ethera Jewelry{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ product.name }}</h1>
+        <p class="meta">SKU: {{ product.sku }} • Count: {{ product.count or 1 }} • Created {{ product.created_at.strftime('%Y-%m-%d') }}</p>
+    </div>
+    <div class="page-header-actions" style="display: flex; gap: 12px;">
+        <a href="/products/{{ product.id }}/edit" class="btn btn-secondary">Edit</a>
+        <form method="POST" action="/products/{{ product.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this product? This will also delete all BOM lines.');">
+            <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+        <a href="/products" class="btn btn-secondary">Back</a>
+    </div>
+</div>
+
+{% if product.description %}
+<div style="margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #e5e5e5;">
+    <p>{{ product.description }}</p>
+</div>
+{% endif %}
+
+<!-- Product Images Section -->
+<div style="margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #e5e5e5;">
+    <h2 style="margin-bottom: 16px;">Product Images</h2>
+    
+    {% if product_images %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        {% for image in product_images %}
+        <div style="position: relative; border: 1px solid #e5e5e5; border-radius: 4px; overflow: hidden; background: #fafafa;">
+            <img src="{{ image.image_url }}" alt="Product Image" style="width: 100%; height: 200px; object-fit: cover; display: block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <div style="display: none; padding: 40px; text-align: center; color: #999;">
+                <p>Image not available</p>
+                <a href="{{ image.image_url }}" target="_blank" class="link">View URL</a>
+            </div>
+            <div style="padding: 8px; background: white; border-top: 1px solid #e5e5e5;">
+                <form method="POST" action="/products/images/{{ image.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this image?');">
+                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; width: 100%;">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="meta" style="margin-bottom: 16px;">No images added yet.</p>
+    {% endif %}
+    
+    <!-- Add Image Form -->
+    <form method="POST" action="/products/{{ product.id }}/images" style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background-color: #fafafa;">
+        <div class="form-group">
+            <label for="image_url">Add Image URL</label>
+            <input type="url" name="image_url" id="image_url" placeholder="https://..." required style="width: 100%;">
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn">Add Image</button>
+        </div>
+    </form>
+</div>
+
+<h2>Bill of Materials</h2>
+<form method="POST" action="/products/{{ product.id }}/bom" style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin-bottom: 24px; background-color: #fafafa;">
+    <div class="bom-form-grid" style="display: grid; grid-template-columns: 2fr 2fr 1fr 2fr auto; gap: 12px; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="material_id" style="font-size: 13px;">Material</label>
+            <select name="material_id" id="material_id" required onchange="loadPurchases()">
+                <option value="">Select material...</option>
+                {% for material in materials %}
+                <option value="{{ material.id }}" data-unit="{{ material.unit }}">{{ material.name }} ({{ material.unit }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="purchase_id" style="font-size: 13px;">Purchase *</label>
+            <select name="purchase_id" id="purchase_id" required disabled>
+                <option value="">Select material first...</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="qty_required" style="font-size: 13px;">Quantity</label>
+            <input type="number" name="qty_required" id="qty_required" step="0.01" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="note" style="font-size: 13px;">Note</label>
+            <input type="text" name="note" id="note" placeholder="e.g. center stone">
+        </div>
+        <div>
+            <button type="submit" class="btn" style="margin-top: 20px;">Add</button>
+        </div>
+    </div>
+    <input type="hidden" name="unit" id="unit">
+</form>
+
+{% if bom_lines %}
+<table>
+    <thead>
+        <tr>
+            <th>Material</th>
+            <th>Purchase</th>
+            <th>Quantity</th>
+            <th>Unit</th>
+            <th>Note</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for bom in bom_lines %}
+        <tr>
+            <td><strong>{{ bom.material_name }}</strong></td>
+            <td class="meta">{{ bom.purchase_info }}</td>
+            <td>{{ bom.qty_required }}</td>
+            <td class="meta">{{ bom.unit }}</td>
+            <td class="meta">{{ bom.note or '' }}</td>
+            <td>
+                <button onclick="deleteBOM({{ bom.id }})" class="btn btn-danger" style="padding: 4px 12px; font-size: 13px;">Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <p>No BOM lines yet. Add materials above.</p>
+</div>
+{% endif %}
+
+<h2 style="margin-top: 48px; padding-top: 32px; border-top: 1px solid #e5e5e5;">Estimated Cost</h2>
+<div id="cost-estimate" style="margin-top: 24px;">
+    <p class="meta">Loading cost estimate...</p>
+</div>
+
+<script>
+async function loadPurchases() {
+    const materialSelect = document.getElementById('material_id');
+    const materialId = materialSelect.value;
+    const purchaseSelect = document.getElementById('purchase_id');
+    const unitInput = document.getElementById('unit');
+    
+    if (!materialId) {
+        purchaseSelect.innerHTML = '<option value="">Select material first...</option>';
+        purchaseSelect.disabled = true;
+        unitInput.value = '';
+        return;
+    }
+    
+    // Get unit from selected material
+    const selectedOption = materialSelect.options[materialSelect.selectedIndex];
+    const unit = selectedOption.getAttribute('data-unit');
+    unitInput.value = unit || '';
+    
+    try {
+        const response = await fetch(`/api/materials/${materialId}/purchases`);
+        const purchases = await response.json();
+        
+        if (purchases.length === 0) {
+            purchaseSelect.innerHTML = '<option value="">No purchases found for this material</option>';
+            purchaseSelect.disabled = true;
+            return;
+        }
+        
+        purchaseSelect.innerHTML = '<option value="">Select purchase...</option>';
+        purchases.forEach(purchase => {
+            const option = document.createElement('option');
+            option.value = purchase.id;
+            const date = new Date(purchase.purchase_date).toLocaleDateString();
+            option.textContent = `${purchase.supplier_name} - ${purchase.unit_cost} ${purchase.currency} (${date})`;
+            purchaseSelect.appendChild(option);
+        });
+        purchaseSelect.disabled = false;
+    } catch (error) {
+        purchaseSelect.innerHTML = '<option value="">Error loading purchases</option>';
+        purchaseSelect.disabled = true;
+    }
+}
+
+async function loadCostEstimate() {
+    try {
+        const response = await fetch('/api/products/{{ product.id }}/cost-estimate');
+        const data = await response.json();
+        
+        let html = '';
+        
+        if (data.has_missing_costs) {
+            html += '<div class="alert alert-warning">Some materials are missing cost data. Please add purchase records.</div>';
+        }
+        
+        if (data.material_breakdown && data.material_breakdown.length > 0) {
+            html += '<table>';
+            html += '<thead><tr><th>Material</th><th>Quantity</th><th>Unit Cost</th><th>Total Cost</th><th>Total Cost (TRY)</th><th></th></tr></thead>';
+            html += '<tbody>';
+            
+            for (const item of data.material_breakdown) {
+                html += '<tr>';
+                html += '<td><strong>' + item.material_name + '</strong></td>';
+                html += '<td>' + item.qty_required + ' <span class="meta">' + item.unit + '</span></td>';
+                if (item.has_cost) {
+                    html += '<td>' + item.unit_cost + ' <span class="meta">' + item.currency + '</span></td>';
+                    html += '<td><strong>' + item.total_cost.toFixed(2) + '</strong> <span class="meta">' + item.currency + '</span></td>';
+                    if (item.total_cost_try !== null && item.total_cost_try !== undefined) {
+                        html += '<td><strong>' + item.total_cost_try.toFixed(2) + '</strong> <span class="meta">TRY</span></td>';
+                    } else {
+                        html += '<td class="meta">-</td>';
+                    }
+                    html += '<td><span class="badge">✓</span></td>';
+                } else {
+                    html += '<td class="meta">-</td>';
+                    html += '<td class="meta">-</td>';
+                    html += '<td class="meta">-</td>';
+                    html += '<td><span class="badge" style="background-color: #fff5f5; color: #d32f2f;">Missing</span></td>';
+                }
+                html += '</tr>';
+            }
+            
+            html += '</tbody></table>';
+            
+            // Display currency totals
+            if (data.currency_totals && data.currency_totals.length > 0) {
+                html += '<div style="margin-top: 24px; padding: 20px; background-color: #fafafa; border: 1px solid #e5e5e5; border-radius: 4px;">';
+                html += '<div style="font-size: 18px; font-weight: 600; color: #1a1a1a; margin-bottom: 12px;">Total Cost by Currency:</div>';
+                data.currency_totals.forEach(currencyTotal => {
+                    html += '<div style="font-size: 20px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px;">';
+                    html += currencyTotal.total.toFixed(2) + ' <span style="font-size: 16px; font-weight: 400; color: #666;">' + currencyTotal.currency + '</span>';
+                    html += '</div>';
+                });
+                
+                // Show Turkish Lira total if available
+                if (data.total_try !== null && data.total_try !== undefined) {
+                    html += '<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e5e5;">';
+                    html += '<div style="font-size: 16px; font-weight: 500; color: #666; margin-bottom: 8px;">Total in Turkish Lira:</div>';
+                    html += '<div style="font-size: 24px; font-weight: 600; color: #1a1a1a; margin-bottom: 12px;">';
+                    html += data.total_try.toFixed(2) + ' <span style="font-size: 18px; font-weight: 400; color: #666;">TRY</span>';
+                    html += '</div>';
+                    
+                    // Show exchange rates used
+                    if (data.exchange_rates && data.exchange_rates.length > 0) {
+                        html += '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e5e5;">';
+                        html += '<div style="font-size: 13px; font-weight: 500; color: #666; margin-bottom: 8px;">Exchange Rates Used (based on purchase dates):</div>';
+                        data.exchange_rates.forEach(rateInfo => {
+                            html += '<div style="font-size: 13px; color: #666; margin-bottom: 4px;">';
+                            html += '1 ' + rateInfo.from_currency + ' = ' + rateInfo.rate.toFixed(4) + ' ' + rateInfo.to_currency;
+                            if (!rateInfo.is_from_api) {
+                                html += ' <span style="color: #d32f2f; font-size: 11px;">(fallback - API unavailable)</span>';
+                            } else {
+                                html += ' <span style="color: #27ae60; font-size: 11px;">(from API)</span>';
+                            }
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+                    
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            }
+        } else {
+            html += '<p class="meta">No BOM lines to calculate cost for.</p>';
+        }
+        
+        document.getElementById('cost-estimate').innerHTML = html;
+    } catch (error) {
+        document.getElementById('cost-estimate').innerHTML = '<p style="color: #d32f2f;">Error loading cost estimate: ' + error.message + '</p>';
+    }
+}
+
+async function deleteBOM(bomId) {
+    if (!confirm('Are you sure you want to delete this BOM line?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/products/bom/' + bomId, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Error deleting BOM line');
+        }
+    } catch (error) {
+        alert('Error deleting BOM line: ' + error.message);
+    }
+}
+
+loadCostEstimate();
+</script>
+{% endblock %}

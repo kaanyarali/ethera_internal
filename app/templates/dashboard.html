@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Ethera Jewelry{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="meta">Overview of your jewelry workshop</p>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #fafafa;">
+        <div style="font-size: 32px; font-weight: 600; margin-bottom: 8px;">{{ total_products }}</div>
+        <div style="color: #666; font-size: 14px;">Total Products</div>
+    </div>
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #fafafa;">
+        <div style="font-size: 32px; font-weight: 600; margin-bottom: 8px;">{{ total_products_count }}</div>
+        <div style="color: #666; font-size: 14px;">Total Product Count</div>
+    </div>
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #fafafa;">
+        <div style="font-size: 32px; font-weight: 600; margin-bottom: 8px;">{{ total_materials }}</div>
+        <div style="color: #666; font-size: 14px;">Total Materials</div>
+    </div>
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #fafafa;">
+        <div style="font-size: 32px; font-weight: 600; margin-bottom: 8px;">{{ total_purchases }}</div>
+        <div style="color: #666; font-size: 14px;">Total Purchases</div>
+    </div>
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #fafafa;">
+        <div style="color: #666; font-size: 14px; margin-bottom: 12px;">Total Spending (All Materials)</div>
+        {% if spending_by_currency %}
+            {% for currency, amount in spending_by_currency.items() %}
+            <div style="margin-bottom: 8px;">
+                <div style="font-size: 24px; font-weight: 600; margin-bottom: 2px;">{{ "{:,.2f}".format(amount) }}</div>
+                <div style="color: #999; font-size: 12px;">{{ currency }}</div>
+            </div>
+            {% endfor %}
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e5e5;">
+                <div style="font-size: 28px; font-weight: 600; margin-bottom: 4px; color: #dc2626;">{{ "{:,.2f}".format(total_spending_try) }}</div>
+                <div style="color: #666; font-size: 13px; font-weight: 500;">Total in TRY</div>
+                {% if exchange_rate_info %}
+                <div style="margin-top: 8px; font-size: 11px; color: #999;">
+                    {% for rate_info in exchange_rate_info %}
+                    <div style="margin-top: 4px;">
+                        1 {{ rate_info.currency }} = {{ "{:.4f}".format(rate_info.rate) }} TRY (fallback rate)
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div style="font-size: 24px; font-weight: 600; color: #999;">0.00</div>
+            <div style="color: #999; font-size: 12px;">No purchases yet</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 32px;">
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Products Created Over Time</h3>
+        <canvas id="products-over-time" style="max-height: 300px;"></canvas>
+    </div>
+    
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Materials by Type</h3>
+        <canvas id="materials-by-type" style="max-height: 300px;"></canvas>
+    </div>
+    
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Purchases Over Time</h3>
+        <canvas id="purchases-over-time" style="max-height: 300px;"></canvas>
+    </div>
+    
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Inventory Value by Currency</h3>
+        <canvas id="inventory-value" style="max-height: 300px;"></canvas>
+    </div>
+    
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Spending Over Time</h3>
+        <canvas id="spending-over-time" style="max-height: 300px;"></canvas>
+    </div>
+</div>
+
+<!-- Full Width Charts -->
+<div style="margin-bottom: 32px;">
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff; margin-bottom: 24px;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Top Materials by Purchase Quantity</h3>
+        <canvas id="top-materials" style="max-height: 400px;"></canvas>
+    </div>
+    
+    <div style="padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; background: #ffffff;">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 600;">Top Products by Total Count</h3>
+        <canvas id="products-by-count" style="max-height: 300px;"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0
+                }
+            }
+        }
+    };
+
+    // Products over time - Line Chart
+    const productsData = {{ products_over_time | safe }};
+    if (productsData.labels.length > 0) {
+        new Chart(document.getElementById('products-over-time'), {
+            type: 'line',
+            data: {
+                labels: productsData.labels,
+                datasets: [{
+                    label: 'Products Created',
+                    data: productsData.data,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#2563eb',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: chartOptions
+        });
+    } else {
+        document.getElementById('products-over-time').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No products yet</p>';
+    }
+
+    // Materials by type - Doughnut Chart
+    const materialsData = {{ materials_by_type | safe }};
+    if (materialsData.labels.length > 0) {
+        new Chart(document.getElementById('materials-by-type'), {
+            type: 'doughnut',
+            data: {
+                labels: materialsData.labels,
+                datasets: [{
+                    data: materialsData.data,
+                    backgroundColor: [
+                        '#2563eb',  // Blue
+                        '#dc2626',  // Red
+                        '#16a34a',  // Green
+                        '#ca8a04',  // Yellow/Amber
+                        '#9333ea',  // Purple
+                        '#ea580c'   // Orange
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('materials-by-type').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No materials yet</p>';
+    }
+
+    // Purchases over time - Bar Chart
+    const purchasesData = {{ purchases_over_time | safe }};
+    if (purchasesData.labels.length > 0) {
+        new Chart(document.getElementById('purchases-over-time'), {
+            type: 'bar',
+            data: {
+                labels: purchasesData.labels,
+                datasets: [{
+                    label: 'Purchases',
+                    data: purchasesData.data,
+                    backgroundColor: '#16a34a',
+                    borderColor: '#15803d',
+                    borderWidth: 1
+                }]
+            },
+            options: chartOptions
+        });
+    } else {
+        document.getElementById('purchases-over-time').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No purchases yet</p>';
+    }
+
+    // Inventory value by currency - Bar Chart
+    const inventoryData = {{ inventory_value | safe }};
+    if (inventoryData.labels.length > 0) {
+        // Create gradient colors for each currency
+        const inventoryColors = inventoryData.labels.map((_, i) => {
+            const colors = ['#9333ea', '#ea580c', '#2563eb', '#16a34a', '#ca8a04'];
+            return colors[i % colors.length];
+        });
+        
+        new Chart(document.getElementById('inventory-value'), {
+            type: 'bar',
+            data: {
+                labels: inventoryData.labels,
+                datasets: [{
+                    label: 'Inventory Value',
+                    data: inventoryData.data,
+                    backgroundColor: inventoryColors,
+                    borderColor: inventoryData.labels.map((_, i) => {
+                        const colors = ['#7e22ce', '#c2410c', '#1d4ed8', '#15803d', '#a16207'];
+                        return colors[i % colors.length];
+                    }),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...chartOptions,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('inventory-value').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No inventory data yet</p>';
+    }
+
+    // Top materials - Horizontal Bar Chart
+    const topMaterialsData = {{ top_materials | safe }};
+    if (topMaterialsData.labels.length > 0) {
+        // Create gradient colors for each material
+        const materialColors = topMaterialsData.labels.map((_, i) => {
+            const colors = ['#2563eb', '#dc2626', '#16a34a', '#ca8a04', '#9333ea', '#ea580c', '#0891b2', '#be185d'];
+            return colors[i % colors.length];
+        });
+        
+        new Chart(document.getElementById('top-materials'), {
+            type: 'bar',
+            data: {
+                labels: topMaterialsData.labels,
+                datasets: [{
+                    label: 'Total Quantity Purchased',
+                    data: topMaterialsData.data,
+                    backgroundColor: materialColors,
+                    borderColor: topMaterialsData.labels.map((_, i) => {
+                        const colors = ['#1d4ed8', '#b91c1c', '#15803d', '#a16207', '#7e22ce', '#c2410c', '#0e7490', '#9f1239'];
+                        return colors[i % colors.length];
+                    }),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...chartOptions,
+                indexAxis: 'y',
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('top-materials').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No purchase data yet</p>';
+    }
+
+    // Products by count - Bar Chart
+    const productsCountData = {{ products_by_count | safe }};
+    if (productsCountData.labels.length > 0) {
+        // Create gradient colors for each product
+        const productColors = productsCountData.labels.map((_, i) => {
+            const colors = ['#2563eb', '#dc2626', '#16a34a', '#ca8a04', '#9333ea', '#ea580c', '#0891b2', '#be185d', '#0d9488', '#7c2d12'];
+            return colors[i % colors.length];
+        });
+        
+        new Chart(document.getElementById('products-by-count'), {
+            type: 'bar',
+            data: {
+                labels: productsCountData.labels,
+                datasets: [{
+                    label: 'Total Count',
+                    data: productsCountData.data,
+                    backgroundColor: productColors,
+                    borderColor: productsCountData.labels.map((_, i) => {
+                        const colors = ['#1d4ed8', '#b91c1c', '#15803d', '#a16207', '#7e22ce', '#c2410c', '#0e7490', '#9f1239', '#0f766e', '#6b1f0f'];
+                        return colors[i % colors.length];
+                    }),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...chartOptions,
+                scales: {
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('products-by-count').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No products yet</p>';
+    }
+
+    // Spending over time - Line Chart
+    const spendingData = {{ spending_over_time | safe }};
+    if (spendingData.labels.length > 0) {
+        new Chart(document.getElementById('spending-over-time'), {
+            type: 'line',
+            data: {
+                labels: spendingData.labels,
+                datasets: [{
+                    label: 'Total Spending',
+                    data: spendingData.data,
+                    borderColor: '#dc2626',
+                    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#dc2626',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                ...chartOptions,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString('en-US', {style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0});
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('spending-over-time').parentElement.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No spending data yet</p>';
+    }
+</script>
+
+<style>
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        
+        div[style*="grid-template-columns"] {
+            grid-template-columns: 1fr !important;
+        }
+        
+        canvas {
+            max-height: 250px !important;
+        }
+    }
+</style>
+{% endblock %}
