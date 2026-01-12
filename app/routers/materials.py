@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from firebase_admin import firestore
 from app.database import get_db
-from app import schemas
+from app import schemas, models
 from app.jinja_templates import templates
 from app.firestore_models import document_to_dict, datetime_to_timestamp
 from datetime import datetime
@@ -35,6 +35,9 @@ def get_material(material_id: str, db = Depends(get_db)):
 def create_material(material: schemas.MaterialCreate, db = Depends(get_db)):
     doc_ref = db.collection("materials").document()
     data = material.model_dump()
+    # Ensure type is stored as string value (not enum object)
+    if "type" in data and isinstance(data["type"], models.MaterialType):
+        data["type"] = data["type"].value
     data["created_at"] = firestore.SERVER_TIMESTAMP
     doc_ref.set(data)
     doc = doc_ref.get()
@@ -49,6 +52,9 @@ def update_material(material_id: str, material: schemas.MaterialUpdate, db = Dep
         raise HTTPException(status_code=404, detail="Material not found")
     
     update_data = material.model_dump(exclude_unset=True)
+    # Ensure type is stored as string value (not enum object)
+    if "type" in update_data and isinstance(update_data["type"], models.MaterialType):
+        update_data["type"] = update_data["type"].value
     if update_data:
         doc_ref.update(update_data)
     
@@ -126,8 +132,14 @@ async def create_material_form(
     notes: str = Form(None),
     db = Depends(get_db)
 ):
+    # Convert string to MaterialType enum
+    try:
+        material_type = models.MaterialType(type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid material type: {type}")
+    
     material = schemas.MaterialCreate(
-        type=type,
+        type=material_type,
         name=name,
         unit=unit,
         notes=notes
@@ -148,7 +160,11 @@ async def update_material_form(
 ):
     update_data = {}
     if type:
-        update_data["type"] = type
+        # Convert string to MaterialType enum
+        try:
+            update_data["type"] = models.MaterialType(type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid material type: {type}")
     if name:
         update_data["name"] = name
     if unit:
