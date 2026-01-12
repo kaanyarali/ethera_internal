@@ -11,11 +11,15 @@ Create a `.env` file in your project root with:
 ```env
 GOOGLE_APPLICATION_CREDENTIALS=/Users/kaanyarali/Downloads/your-project-firebase-adminsdk-xxxxx.json
 FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+GCP_PROJECT_ID=your-project-id
+FIRESTORE_DATABASE_ID=(default)
 ```
 
 **Replace with your actual values:**
 - `GOOGLE_APPLICATION_CREDENTIALS`: Full path to your downloaded Firebase service account JSON file
 - `FIREBASE_STORAGE_BUCKET`: Your Firebase Storage bucket name (found in Firebase Console > Storage)
+- `GCP_PROJECT_ID`: Your Google Cloud Project ID (e.g., `project-2799141d-0677-4078-a07`) - **Required if database not found**
+- `FIRESTORE_DATABASE_ID`: Your Firestore database ID (usually `(default)` unless you created a custom one)
 
 ---
 
@@ -28,10 +32,16 @@ FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 3. Click **"Edit & Deploy New Revision"**
 4. Scroll to **"Variables & Secrets"** tab
 5. Click **"Add Variable"**
-6. Add this **ONE** environment variable:
+6. Add these environment variables:
 
    **Name:** `FIREBASE_STORAGE_BUCKET`  
    **Value:** `your-project-id.appspot.com` (your actual bucket name)
+   
+   **Name:** `GCP_PROJECT_ID` (if needed)  
+   **Value:** `your-project-id` (e.g., `project-2799141d-0677-4078-a07`)
+   
+   **Name:** `FIRESTORE_DATABASE_ID` (if using custom database)  
+   **Value:** `(default)` or your custom database ID
 
 7. Click **"Deploy"**
 
@@ -42,7 +52,7 @@ FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
 ```bash
 gcloud run services update ethera-jewelry \
   --region us-central1 \
-  --set-env-vars FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com
+  --set-env-vars FIREBASE_STORAGE_BUCKET=your-project-id.appspot.com,GCP_PROJECT_ID=your-project-id,FIRESTORE_DATABASE_ID=(default)
 ```
 
 ---
@@ -166,7 +176,39 @@ ethera-jewelry-abc123.appspot.com
 - Verify the JSON file exists at that path
 - For Cloud Run, this shouldn't happen (uses default credentials)
 
+**"The database (default) does not exist for project..."**
+- **Solution 1:** Set `GCP_PROJECT_ID` environment variable to your project ID
+  - Find your project ID in GCP Console or Firebase Console
+  - Example: `GCP_PROJECT_ID=project-2799141d-0677-4078-a07`
+- **Solution 2:** Verify the database exists in Firebase Console
+  - Go to Firebase Console > Firestore Database
+  - Make sure a database is created
+  - Note the database ID (usually `(default)`)
+- **Solution 3:** If using a custom database ID, set `FIRESTORE_DATABASE_ID`
+  - Example: `FIRESTORE_DATABASE_ID=production`
+
 **"Could not initialize Firebase Storage bucket"**
 - Verify `FIREBASE_STORAGE_BUCKET` is set correctly
 - Check bucket name format: `project-id.appspot.com`
 - Ensure Storage is enabled in Firebase Console
+
+### How to Find Your Project ID
+
+1. **From Error Message:**
+   - Look at the error: `project-2799141d-0677-4078-a07` is your project ID
+   
+2. **From GCP Console:**
+   - Go to [GCP Console](https://console.cloud.google.com/)
+   - Project ID is shown at the top
+   
+3. **From Firebase Console:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Click Project Settings (gear icon)
+   - Project ID is shown in "General" tab
+
+### How to Find Your Database ID
+
+1. Go to [Firebase Console](https://console.firebase.google.com/) > Firestore Database
+2. If you see multiple databases, each has an ID
+3. Default database ID is: `(default)`
+4. Custom databases show their name (e.g., `production`, `staging`)
