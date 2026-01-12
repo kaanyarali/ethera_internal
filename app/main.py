@@ -1,9 +1,14 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from app.routers import materials, purchases, products, cost, dashboard
 from app.jinja_templates import templates
 
 app = FastAPI(title="Ethera Jewelry")
+
+# Health check endpoint for Cloud Run
+@app.get("/health")
+async def health_check():
+    return JSONResponse({"status": "healthy"})
 
 # Include routers
 app.include_router(materials.router, prefix="/api/materials", tags=["materials"])

@@ -3,6 +3,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from typing import Generator
 from dotenv import load_dotenv
+from fastapi import HTTPException
 
 # Load environment variables from .env file
 load_dotenv()
@@ -40,8 +41,27 @@ if not firebase_admin._apps:
 
 # Get Firestore client - use specified database ID or default to "(default)"
 database_id = os.getenv("FIRESTORE_DATABASE_ID", "(default)")
-db = firestore.client(database=database_id)
+db = None
+try:
+    db = firestore.client(database=database_id)
+    print(f"✓ Firestore client initialized (database: {database_id})")
+except Exception as e:
+    print(f"⚠ Firestore client initialization error: {e}")
+    print("⚠ Attempting to initialize without database ID...")
+    try:
+        db = firestore.client()
+        print("✓ Firestore client initialized with default database")
+    except Exception as e2:
+        print(f"⚠⚠⚠ CRITICAL: Firestore client initialization failed: {e2}")
+        print("⚠⚠⚠ App will start but database operations will fail!")
+        print("⚠⚠⚠ Check your GCP_PROJECT_ID and FIRESTORE_DATABASE_ID environment variables")
+        # Don't raise - let app start so we can see the error in logs
 
 def get_db() -> Generator:
     """Firestore client dependency (replaces SQLAlchemy session)"""
+    if db is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="Database not initialized. Check Cloud Run logs for Firebase initialization errors."
+        )
     yield db
