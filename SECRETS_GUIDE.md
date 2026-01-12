@@ -187,6 +187,13 @@ ethera-jewelry-abc123.appspot.com
 - **Solution 3:** If using a custom database ID, set `FIRESTORE_DATABASE_ID`
   - Example: `FIRESTORE_DATABASE_ID=production`
 
+**"403 Missing or insufficient permissions"**
+- **This is a permissions issue! Your Cloud Run service account needs Firestore access**
+- **Quick Fix:** Go to [IAM & Admin](https://console.cloud.google.com/iam-admin/iam)
+  - Find your Cloud Run service account: `PROJECT_NUMBER-compute@developer.gserviceaccount.com`
+  - Add role: **Cloud Datastore User** (`roles/datastore.user`)
+  - See `FIX_PERMISSIONS.md` for detailed instructions
+
 **"Could not initialize Firebase Storage bucket"**
 - Verify `FIREBASE_STORAGE_BUCKET` is set correctly
 - Check bucket name format: `project-id.appspot.com`
