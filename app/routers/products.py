@@ -257,13 +257,19 @@ async def edit_product_page(request: Request, product_id: str, db = Depends(get_
 @html_router.post("/products", response_class=HTMLResponse)
 async def create_product_form(
     request: Request,
-    sku: str = Form(...),
-    name: str = Form(...),
-    description: str = Form(None),
-    count: int = Form(1),
-    images: Optional[List[UploadFile]] = File(None),
     db = Depends(get_db)
 ):
+    # Parse form data manually to handle multiple files
+    form = await request.form()
+    
+    sku = form.get("sku")
+    name = form.get("name")
+    description = form.get("description")
+    count = int(form.get("count", 1))
+    
+    if not sku or not name:
+        raise HTTPException(status_code=400, detail="SKU and name are required")
+    
     product = schemas.ProductCreate(
         sku=sku,
         name=name,
@@ -274,8 +280,18 @@ async def create_product_form(
     result = create_product(product, db)
     product_id = result['id']
     
+    # Handle multiple image uploads
+    # When using HTML form with multiple attribute, files come as separate entries
+    # We need to iterate through all form entries to find all "images" fields
+    image_files = []
+    # Iterate through all form entries
+    for key, value in form.multi_items():
+        if key == "images" and isinstance(value, UploadFile):
+            if value.filename:  # Only add if file has a filename
+                image_files.append(value)
+    
     # Upload images if provided
-    if images and len(images) > 0:
+    if image_files:
         images_ref = db.collection("product_images")
         image_docs = images_ref.where("product_id", "==", product_id).stream()
         max_order = -1
@@ -284,7 +300,7 @@ async def create_product_form(
             if image_data and "order" in image_data:
                 max_order = max(max_order, image_data["order"])
         
-        for idx, image_file in enumerate(images):
+        for idx, image_file in enumerate(image_files):
             if image_file.filename:
                 # Read file content
                 file_content = await image_file.read()
