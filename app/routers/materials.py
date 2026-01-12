@@ -34,10 +34,16 @@ def get_material(material_id: str, db = Depends(get_db)):
 @router.post("/", response_model=schemas.Material)
 def create_material(material: schemas.MaterialCreate, db = Depends(get_db)):
     doc_ref = db.collection("materials").document()
+    # Convert to dict and ensure type is a string
     data = material.model_dump()
-    # Ensure type is stored as string value (not enum object)
-    if "type" in data and isinstance(data["type"], models.MaterialType):
-        data["type"] = data["type"].value
+    # Explicitly convert type enum to string value
+    if hasattr(material, 'type') and material.type:
+        data["type"] = material.type.value if isinstance(material.type, models.MaterialType) else str(material.type)
+    elif "type" in data:
+        if isinstance(data["type"], models.MaterialType):
+            data["type"] = data["type"].value
+        elif data["type"] is not None:
+            data["type"] = str(data["type"])
     data["created_at"] = firestore.SERVER_TIMESTAMP
     doc_ref.set(data)
     doc = doc_ref.get()
@@ -51,10 +57,15 @@ def update_material(material_id: str, material: schemas.MaterialUpdate, db = Dep
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Material not found")
     
-    update_data = material.model_dump(exclude_unset=True)
+    # Use model_dump with mode='python' to get enum values as strings
+    update_data = material.model_dump(exclude_unset=True, mode='python')
     # Ensure type is stored as string value (not enum object)
-    if "type" in update_data and isinstance(update_data["type"], models.MaterialType):
-        update_data["type"] = update_data["type"].value
+    if "type" in update_data:
+        if isinstance(update_data["type"], models.MaterialType):
+            update_data["type"] = update_data["type"].value
+        elif not isinstance(update_data["type"], str):
+            # Fallback: convert to string
+            update_data["type"] = str(update_data["type"])
     if update_data:
         doc_ref.update(update_data)
     
