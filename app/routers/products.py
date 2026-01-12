@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Form, UploadFile, File
+from typing import Optional, List
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from firebase_admin import firestore
 from datetime import datetime
@@ -259,19 +260,57 @@ async def create_product_form(
     sku: str = Form(...),
     name: str = Form(...),
     description: str = Form(None),
-    image_url: str = Form(None),
     count: int = Form(1),
+    images: Optional[List[UploadFile]] = File(None),
     db = Depends(get_db)
 ):
     product = schemas.ProductCreate(
         sku=sku,
         name=name,
         description=description,
-        image_url=image_url,
+        image_url=None,  # No longer using image_url
         count=count
     )
     result = create_product(product, db)
-    return RedirectResponse(url=f"/products/{result['id']}", status_code=303)
+    product_id = result['id']
+    
+    # Upload images if provided
+    if images and len(images) > 0:
+        images_ref = db.collection("product_images")
+        image_docs = images_ref.where("product_id", "==", product_id).stream()
+        max_order = -1
+        for image_doc in image_docs:
+            image_data = image_doc.to_dict()
+            if image_data and "order" in image_data:
+                max_order = max(max_order, image_data["order"])
+        
+        for idx, image_file in enumerate(images):
+            if image_file.filename:
+                # Read file content
+                file_content = await image_file.read()
+                
+                # Determine content type
+                content_type = image_file.content_type or "image/jpeg"
+                
+                # Upload to Firebase Storage
+                image_url = storage_client.upload_file(
+                    file_content, 
+                    image_file.filename, 
+                    content_type
+                )
+                
+                if image_url:
+                    # Create product image record
+                    doc_ref = db.collection("product_images").document()
+                    data = {
+                        "product_id": product_id,
+                        "image_url": image_url,
+                        "order": max_order + 1 + idx,
+                        "created_at": firestore.SERVER_TIMESTAMP
+                    }
+                    doc_ref.set(data)
+    
+    return RedirectResponse(url=f"/products/{product_id}", status_code=303)
 
 
 @html_router.post("/products/{product_id}", response_class=HTMLResponse)

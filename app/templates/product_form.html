@@ -10,7 +10,7 @@
     <a href="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" class="btn btn-secondary">Cancel</a>
 </div>
 
-<form method="POST" action="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" style="max-width: 600px;">
+<form method="POST" action="{% if product %}/products/{{ product.id }}{% else %}/products{% endif %}" enctype="multipart/form-data" style="max-width: 600px;">
     <div class="form-group">
         <label for="sku">SKU *</label>
         <input type="text" name="sku" id="sku" value="{% if product %}{{ product.sku }}{% endif %}" required>
@@ -26,10 +26,14 @@
         <textarea name="description" id="description">{% if product %}{{ product.description or '' }}{% endif %}</textarea>
     </div>
     
+    {% if not product %}
     <div class="form-group">
-        <label for="image_url">Image URL</label>
-        <input type="text" name="image_url" id="image_url" value="{% if product %}{{ product.image_url or '' }}{% endif %}" placeholder="https://...">
+        <label for="images">Product Images</label>
+        <input type="file" name="images" id="images" multiple accept="image/*" style="padding: 8px; border: 1px solid #e5e5e5; border-radius: 4px; width: 100%;">
+        <small class="form-hint">You can select multiple images. Images will be uploaded to Firebase Storage.</small>
+        <div id="image-preview" style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;"></div>
     </div>
+    {% endif %}
     
     <div class="form-group">
         <label for="count">Count *</label>
@@ -41,4 +45,46 @@
         <button type="submit" class="btn">{% if product %}Update{% else %}Create{% endif %} Product</button>
     </div>
 </form>
+
+{% if not product %}
+<script>
+// Image preview
+document.getElementById('images').addEventListener('change', function(e) {
+    const preview = document.getElementById('image-preview');
+    preview.innerHTML = '';
+    
+    Array.from(e.target.files).forEach((file, index) => {
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const div = document.createElement('div');
+                div.style.position = 'relative';
+                div.style.border = '1px solid #e5e5e5';
+                div.style.borderRadius = '4px';
+                div.style.overflow = 'hidden';
+                
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.style.width = '100%';
+                img.style.height = '100px';
+                img.style.objectFit = 'cover';
+                img.style.display = 'block';
+                
+                const label = document.createElement('div');
+                label.style.padding = '4px 8px';
+                label.style.background = '#fafafa';
+                label.style.fontSize = '11px';
+                label.style.color = '#666';
+                label.textContent = file.name;
+                
+                div.appendChild(img);
+                div.appendChild(label);
+                preview.appendChild(div);
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+});
+</script>
+{% endif %}
 {% endblock %}
