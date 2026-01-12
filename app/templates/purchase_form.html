@@ -17,7 +17,7 @@
             <option value="">Select material...</option>
             {% for material in materials %}
             <option value="{{ material.id }}" {% if purchase and purchase.material_id == material.id %}selected{% endif %}>
-                {{ material.name }} ({{ material.type.value }})
+                {{ material.name }}{% if material.type %} ({{ material.type }}){% endif %}
             </option>
             {% endfor %}
         </select>
