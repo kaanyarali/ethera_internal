@@ -10,14 +10,20 @@
     <a href="/materials" class="btn btn-secondary">Cancel</a>
 </div>
 
-<form method="POST" action="{% if material %}/api/materials/{{ material.id }}{% else %}/api/materials/{% endif %}" style="max-width: 600px;">
+<form method="POST" action="{% if material %}/materials/{{ material.id }}{% else %}/materials{% endif %}" style="max-width: 600px;">
     <div class="form-group">
         <label for="type">Type *</label>
         <select name="type" id="type" required>
             <option value="">Select type...</option>
-            <option value="GEMSTONE" {% if material and material.type.value == 'GEMSTONE' %}selected{% endif %}>Gemstone</option>
-            <option value="METAL" {% if material and material.type.value == 'METAL' %}selected{% endif %}>Metal</option>
-            <option value="OTHER" {% if material and material.type.value == 'OTHER' %}selected{% endif %}>Other</option>
+            {% if material and material.type %}
+                <option value="GEMSTONE" {% if material.type == 'GEMSTONE' %}selected{% endif %}>Gemstone</option>
+                <option value="METAL" {% if material.type == 'METAL' %}selected{% endif %}>Metal</option>
+                <option value="OTHER" {% if material.type == 'OTHER' %}selected{% endif %}>Other</option>
+            {% else %}
+                <option value="GEMSTONE">Gemstone</option>
+                <option value="METAL">Metal</option>
+                <option value="OTHER">Other</option>
+            {% endif %}
         </select>
     </div>
     
@@ -41,32 +47,4 @@
     </div>
 </form>
 
-<script>
-document.querySelector('form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
-    
-    const url = e.target.action;
-    const method = '{% if material %}PUT{% else %}POST{% endif %}';
-    
-    try {
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        });
-        
-        if (response.ok) {
-            window.location.href = '/materials';
-        } else {
-            alert('Error saving material');
-        }
-    } catch (error) {
-        alert('Error saving material: ' + error.message);
-    }
-});
-</script>
 {% endblock %}
