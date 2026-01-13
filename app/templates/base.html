@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>{% block title %}Ethera Jewelry{% endblock %}</title>
     <style>
         * {
@@ -343,6 +343,9 @@
                 margin-right: 16px;
                 margin-bottom: 8px;
                 font-size: 13px;
+                min-height: 44px; /* Touch-friendly */
+                display: inline-flex;
+                align-items: center;
             }
             
             nav a:first-child {
@@ -377,16 +380,35 @@
             .page-header-actions {
                 width: 100%;
                 flex-direction: column;
+                gap: 8px;
             }
             
-            .page-header-actions .btn {
+            .page-header-actions .btn,
+            .page-header-actions form {
+                width: 100%;
+            }
+            
+            .page-header-actions form .btn {
+                width: 100%;
+            }
+            
+            .page-header > div:last-child {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .page-header > div:last-child > a,
+            .page-header > div:last-child > form {
                 width: 100%;
             }
             
             .btn {
-                padding: 10px 16px;
+                padding: 12px 16px;
                 font-size: 14px;
                 min-height: 44px; /* Touch-friendly */
+                min-width: 44px; /* Touch-friendly */
             }
             
             /* Make tables horizontally scrollable on mobile */
@@ -394,8 +416,9 @@
                 display: block;
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
-                white-space: nowrap;
                 width: 100%;
+                border: 1px solid #e5e5e5;
+                border-radius: 4px;
             }
             
             table thead,
@@ -407,20 +430,39 @@
             }
             
             th, td {
-                padding: 10px 8px;
+                padding: 12px 8px;
                 font-size: 13px;
+                word-wrap: break-word;
             }
             
             th {
                 font-size: 11px;
+                white-space: nowrap;
             }
             
             /* Make table action buttons touch-friendly */
             td .btn,
             td .link {
-                min-height: 36px;
-                padding: 6px 12px;
+                min-height: 44px;
+                min-width: 44px;
+                padding: 8px 12px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            /* Stack action links vertically on very small screens */
+            td {
+                vertical-align: middle;
+            }
+            
+            td .link + span {
+                display: none; /* Hide separator on mobile */
+            }
+            
+            td form {
                 display: inline-block;
+                margin-top: 4px;
             }
             
             /* Stack table action elements on very small screens */
@@ -453,14 +495,45 @@
                 font-size: 16px; /* Prevents zoom on iOS */
                 padding: 12px;
                 min-height: 44px; /* Touch-friendly */
+                width: 100%;
+                box-sizing: border-box;
+            }
+            
+            input[type="file"] {
+                min-height: 44px;
+                padding: 8px;
+                font-size: 16px;
             }
             
             .form-group {
                 margin-bottom: 20px;
             }
             
+            .form-hint {
+                font-size: 13px;
+                display: block;
+                margin-top: 4px;
+            }
+            
             .empty-state {
                 padding: 32px 16px;
+            }
+            
+            /* Improve button groups on mobile */
+            .page-header > div:last-child {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            /* Better spacing for action buttons */
+            .actions {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .actions .btn {
+                width: 100%;
             }
         }
         
@@ -492,17 +565,27 @@
                 margin-top: 0 !important;
             }
             
-            .bom-form-grid {
-                grid-template-columns: 1fr !important;
-                gap: 16px !important;
-            }
-            
-            .bom-form-grid > div:last-child {
-                margin-top: 0 !important;
-            }
-            
             .bom-form-grid .btn {
                 width: 100%;
+                min-height: 44px;
+            }
+            
+            /* Image carousel mobile improvements */
+            #image-carousel {
+                max-width: 100% !important;
+            }
+            
+            #image-carousel button {
+                width: 56px !important;
+                height: 56px !important;
+                font-size: 28px !important;
+            }
+            
+            /* Thumbnail strip mobile */
+            #image-carousel + div {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 8px;
             }
             
             /* Make form grids stack on mobile */
@@ -528,6 +611,35 @@
             /* Better spacing for BOM form on mobile */
             form[style*="padding: 20px"] {
                 padding: 16px !important;
+            }
+            
+            /* Image carousel mobile improvements */
+            #image-carousel {
+                max-width: 100% !important;
+            }
+            
+            #image-carousel button {
+                width: 56px !important;
+                height: 56px !important;
+                font-size: 28px !important;
+            }
+            
+            /* Thumbnail strip mobile */
+            #image-carousel + div {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 8px;
+            }
+            
+            /* Improve meta text on mobile */
+            .meta {
+                font-size: 12px;
+            }
+            
+            /* Better spacing for page headers */
+            .page-header p.meta {
+                font-size: 13px;
+                line-height: 1.4;
             }
         }
     </style>
