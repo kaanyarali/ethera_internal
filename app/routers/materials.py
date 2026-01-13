@@ -76,12 +76,24 @@ def update_material(material_id: str, material: schemas.MaterialUpdate, db = Dep
 @router.get("/{material_id}/purchases", response_model=list[schemas.Purchase])
 def get_material_purchases(material_id: str, db = Depends(get_db)):
     purchases_ref = db.collection("purchases")
-    docs = purchases_ref.where("material_id", "==", material_id).order_by("purchase_date", direction=firestore.Query.DESCENDING).stream()
+    # Fetch without order_by to avoid index requirement, then sort in Python
+    docs = purchases_ref.where("material_id", "==", material_id).stream()
     purchases = []
     for doc in docs:
         purchase = document_to_dict(doc)
         if purchase:
             purchases.append(purchase)
+    # Sort by purchase_date descending in Python
+    from datetime import datetime
+    def sort_key(x):
+        purchase_date = x.get("purchase_date")
+        if purchase_date:
+            if hasattr(purchase_date, 'timestamp'):
+                return purchase_date.timestamp()
+            elif isinstance(purchase_date, datetime):
+                return purchase_date.timestamp()
+        return 0
+    purchases.sort(key=sort_key, reverse=True)
     return purchases
 
 
@@ -126,6 +138,78 @@ async def materials_page(request: Request, db = Depends(get_db)):
 @html_router.get("/materials/new", response_class=HTMLResponse)
 async def new_material_page(request: Request):
     return templates.TemplateResponse("material_form.html", {"request": request, "material": None})
+
+
+# Define delete-all route BEFORE {material_id} routes to ensure proper matching
+@html_router.post("/materials/delete-all", response_class=HTMLResponse)
+async def delete_all_materials_form(request: Request, db = Depends(get_db)):
+    """Delete all materials and their related data (BOM lines, purchases)"""
+    try:
+        materials_ref = db.collection("materials")
+        materials = materials_ref.stream()
+        
+        deleted_count = 0
+        errors = []
+        
+        # Collect all material IDs first
+        material_ids = []
+        for material_doc in materials:
+            if material_doc.exists:
+                material_ids.append(material_doc.id)
+        
+        # If no materials, just redirect
+        if not material_ids:
+            return RedirectResponse(url="/materials", status_code=303)
+        
+        # Delete each material and its related data
+        for material_id in material_ids:
+            try:
+                # Check if material exists
+                doc_ref = db.collection("materials").document(material_id)
+                doc = doc_ref.get()
+                if not doc.exists:
+                    continue  # Skip if already deleted
+                
+                # Delete all BOM lines that reference this material
+                bom_lines = db.collection("product_bom").where("material_id", "==", material_id).stream()
+                for bom_line in bom_lines:
+                    try:
+                        bom_line.reference.delete()
+                    except Exception as bom_error:
+                        print(f"Warning: Could not delete BOM line {bom_line.id}: {bom_error}")
+                
+                # Delete all purchases that reference this material
+                purchases = db.collection("purchases").where("material_id", "==", material_id).stream()
+                for purchase in purchases:
+                    try:
+                        purchase.reference.delete()
+                    except Exception as purchase_error:
+                        print(f"Warning: Could not delete purchase {purchase.id}: {purchase_error}")
+                
+                # Delete material
+                doc_ref.delete()
+                deleted_count += 1
+                
+            except Exception as e:
+                error_msg = str(e)
+                # Don't treat "not found" as an error - material might have been deleted already
+                if "not found" not in error_msg.lower():
+                    errors.append(f"Material {material_id}: {error_msg}")
+                    print(f"Error deleting material {material_id}: {e}")
+                # Continue with other materials even if one fails
+        
+        if errors:
+            print(f"Errors during bulk delete: {errors}")
+        
+        print(f"Successfully deleted {deleted_count} material(s)")
+        
+    except Exception as e:
+        print(f"Critical error in delete_all_materials_form: {e}")
+        import traceback
+        traceback.print_exc()
+        # Still redirect even if there's an error
+    
+    return RedirectResponse(url="/materials", status_code=303)
 
 
 @html_router.get("/materials/{material_id}/edit", response_class=HTMLResponse)

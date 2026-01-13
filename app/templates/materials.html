@@ -8,7 +8,14 @@
         <h1>Materials</h1>
         <p class="meta">Manage your inventory materials</p>
     </div>
-    <a href="/materials/new" class="btn">Add Material</a>
+    <div style="display: flex; gap: 12px; align-items: center;">
+        <a href="/materials/new" class="btn">Add Material</a>
+        {% if materials %}
+        <form method="POST" action="/materials/delete-all" style="display: inline;" onsubmit="return confirmDeleteAll(event, 'materials');">
+            <button type="submit" class="btn btn-danger">Delete All</button>
+        </form>
+        {% endif %}
+    </div>
 </div>
 
 {% if materials %}
@@ -52,4 +59,42 @@
     <p style="margin-top: 16px;"><a href="/materials/new" class="link">Add your first material</a></p>
 </div>
 {% endif %}
+
+<script>
+function confirmDeleteAll(event, type) {
+    event.preventDefault();
+    const count = {{ materials|length }};
+    const typeName = type === 'materials' ? 'material' : 'purchase';
+    const typeNamePlural = type === 'materials' ? 'materials' : 'purchases';
+    
+    let message = `⚠️ WARNING: This will permanently delete ALL ${count} ${typeNamePlural}(s)`;
+    if (type === 'materials') {
+        message += ' and all associated data (BOM lines, purchases)';
+    } else if (type === 'purchases') {
+        message += ' (only those not referenced by BOM lines)';
+    }
+    message += `.\n\nThis action CANNOT be undone!\n\nType "DELETE ALL" to confirm:`;
+    
+    const userInput = prompt(message);
+    
+    if (userInput === "DELETE ALL") {
+        // Show loading state on the button
+        const form = event.target.closest('form');
+        const button = form.querySelector('button[type="submit"]');
+        if (button && window.showButtonLoading) {
+            window.showButtonLoading(button);
+        } else if (button) {
+            button.disabled = true;
+            button.textContent = 'Deleting...';
+        }
+        
+        // Submit the form
+        form.submit();
+        return true;
+    } else {
+        alert('Deletion cancelled. You must type "DELETE ALL" exactly to confirm.');
+        return false;
+    }
+}
+</script>
 {% endblock %}

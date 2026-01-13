@@ -12,6 +12,11 @@
         <button type="button" id="save-counts-btn" class="btn" style="display: none;">Save Changes</button>
         <a href="/products/export/excel" class="btn btn-secondary">Export to Excel</a>
         <a href="/products/new" class="btn">Add Product</a>
+        {% if products %}
+        <form method="POST" action="/products/delete-all" style="display: inline;" onsubmit="return confirmDeleteAll(event);">
+            <button type="submit" class="btn btn-danger">Delete All</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
@@ -21,6 +26,8 @@
         <tr>
             <th>SKU</th>
             <th>Name</th>
+            <th>Collection</th>
+            <th>Type</th>
             <th>Description</th>
             <th>Count</th>
             <th>Created</th>
@@ -32,6 +39,18 @@
         <tr>
             <td class="meta">{{ product.sku }}</td>
             <td><a href="/products/{{ product.id }}" class="link"><strong>{{ product.name }}</strong></a></td>
+            <td class="meta">{{ product.collection_name or '-' }}</td>
+            <td class="meta">
+                {% if product.product_type %}
+                    {% if product.product_type == 'RING' %}Ring
+                    {% elif product.product_type == 'NECKLACE' %}Necklace
+                    {% elif product.product_type == 'EARRING' %}Earring
+                    {% elif product.product_type == 'BRACELET' %}Bracelet
+                    {% else %}{{ product.product_type }}{% endif %}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
             <td class="meta">{{ product.description or '' }}</td>
             <td>
                 <input type="number" 
@@ -62,6 +81,34 @@
 {% endif %}
 
 <script>
+function confirmDeleteAll(event) {
+    event.preventDefault();
+    const productCount = {{ products|length }};
+    
+    // Double confirmation with typed confirmation
+    const message = `⚠️ WARNING: This will permanently delete ALL ${productCount} product(s) and all associated data (BOM lines, images).\n\nThis action CANNOT be undone!\n\nType "DELETE ALL" to confirm:`;
+    const userInput = prompt(message);
+    
+    if (userInput === "DELETE ALL") {
+        // Show loading state on the button
+        const form = event.target.closest('form');
+        const button = form.querySelector('button[type="submit"]');
+        if (button && window.showButtonLoading) {
+            window.showButtonLoading(button);
+        } else if (button) {
+            button.disabled = true;
+            button.textContent = 'Deleting...';
+        }
+        
+        // Submit the form
+        form.submit();
+        return true;
+    } else {
+        alert('Deletion cancelled. You must type "DELETE ALL" exactly to confirm.');
+        return false;
+    }
+}
+
 (function() {
     const saveBtn = document.getElementById('save-counts-btn');
     const countInputs = document.querySelectorAll('.editable-count');
@@ -114,6 +161,14 @@
             return;
         }
         
+        // Show loading state
+        if (window.showButtonLoading) {
+            window.showButtonLoading(saveBtn);
+        } else {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Processing...';
+        }
+        
         try {
             const response = await fetch('/api/products/bulk-update-counts', {
                 method: 'POST',
@@ -136,9 +191,21 @@
                 window.location.reload();
             } else {
                 const error = await response.json();
+                if (window.hideButtonLoading) {
+                    window.hideButtonLoading(saveBtn);
+                } else {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save All Changes';
+                }
                 alert('Error updating counts: ' + (error.detail || 'Unknown error'));
             }
         } catch (error) {
+            if (window.hideButtonLoading) {
+                window.hideButtonLoading(saveBtn);
+            } else {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save All Changes';
+            }
             alert('Error updating counts: ' + error.message);
         }
     });

@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict, Any
-from app.models import MaterialType
+from app.models import MaterialType, ProductType
 
 
 # Material schemas
@@ -75,6 +75,8 @@ class ProductBase(BaseModel):
     description: Optional[str] = None
     image_url: Optional[str] = None
     count: int = 1
+    collection_name: Optional[str] = None
+    product_type: Optional[ProductType] = None
 
 
 class ProductCreate(ProductBase):
@@ -87,6 +89,8 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     image_url: Optional[str] = None
     count: Optional[int] = None
+    collection_name: Optional[str] = None
+    product_type: Optional[ProductType] = None
 
 
 class Product(ProductBase):

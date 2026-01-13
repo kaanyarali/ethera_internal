@@ -22,6 +22,29 @@
     </div>
     
     <div class="form-group">
+        <label for="collection_name">Collection Name</label>
+        <input type="text" name="collection_name" id="collection_name" value="{% if product %}{{ product.collection_name or '' }}{% endif %}" placeholder="e.g. Spring Collection, Classic Series">
+    </div>
+    
+    <div class="form-group">
+        <label for="product_type">Product Type</label>
+        <select name="product_type" id="product_type">
+            <option value="">Select type...</option>
+            {% if product and product.product_type %}
+                <option value="RING" {% if product.product_type == 'RING' %}selected{% endif %}>Ring</option>
+                <option value="NECKLACE" {% if product.product_type == 'NECKLACE' %}selected{% endif %}>Necklace</option>
+                <option value="EARRING" {% if product.product_type == 'EARRING' %}selected{% endif %}>Earring</option>
+                <option value="BRACELET" {% if product.product_type == 'BRACELET' %}selected{% endif %}>Bracelet</option>
+            {% else %}
+                <option value="RING">Ring</option>
+                <option value="NECKLACE">Necklace</option>
+                <option value="EARRING">Earring</option>
+                <option value="BRACELET">Bracelet</option>
+            {% endif %}
+        </select>
+    </div>
+    
+    <div class="form-group">
         <label for="description">Description</label>
         <textarea name="description" id="description">{% if product %}{{ product.description or '' }}{% endif %}</textarea>
     </div>
@@ -31,7 +54,10 @@
         <label for="images">Product Images</label>
         <input type="file" name="images" id="images" multiple accept="image/*" style="padding: 8px; border: 1px solid #e5e5e5; border-radius: 4px; width: 100%;">
         <small class="form-hint">You can select multiple images. Images will be uploaded to Firebase Storage.</small>
-        <div id="image-preview" style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;"></div>
+        <div id="uploaded-filenames" style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 4px; display: none;">
+            <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Selected Images:</div>
+            <ul id="filename-list" style="margin: 0; padding-left: 20px; color: #666;"></ul>
+        </div>
     </div>
     {% endif %}
     
@@ -48,41 +74,91 @@
 
 {% if not product %}
 <script>
-// Image preview
+// Store previously selected files to allow incremental selection
+let selectedFiles = [];
+
+// Show only filenames (no thumbnails) - support incremental file selection
 document.getElementById('images').addEventListener('change', function(e) {
-    const preview = document.getElementById('image-preview');
-    preview.innerHTML = '';
+    const filenameContainer = document.getElementById('uploaded-filenames');
+    const filenameList = document.getElementById('filename-list');
+    const fileInput = e.target;
     
-    Array.from(e.target.files).forEach((file, index) => {
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const div = document.createElement('div');
-                div.style.position = 'relative';
-                div.style.border = '1px solid #e5e5e5';
-                div.style.borderRadius = '4px';
-                div.style.overflow = 'hidden';
-                
-                const img = document.createElement('img');
-                img.src = e.target.result;
-                img.style.width = '100%';
-                img.style.height = '100px';
-                img.style.objectFit = 'cover';
-                img.style.display = 'block';
-                
-                const label = document.createElement('div');
-                label.style.padding = '4px 8px';
-                label.style.background = '#fafafa';
-                label.style.fontSize = '11px';
-                label.style.color = '#666';
-                label.textContent = file.name;
-                
-                div.appendChild(img);
-                div.appendChild(label);
-                preview.appendChild(div);
-            };
-            reader.readAsDataURL(file);
+    // Get newly selected files
+    const newFiles = Array.from(fileInput.files).filter(file => file.type.startsWith('image/'));
+    
+    // Combine with previously selected files (avoid duplicates by name)
+    const existingNames = new Set(selectedFiles.map(f => f.name));
+    newFiles.forEach(file => {
+        if (!existingNames.has(file.name)) {
+            selectedFiles.push(file);
         }
+    });
+    
+    // Update the file input to include all selected files
+    // Create a new FileList using DataTransfer
+    const dataTransfer = new DataTransfer();
+    selectedFiles.forEach(file => {
+        dataTransfer.items.add(file);
+    });
+    fileInput.files = dataTransfer.files;
+    
+    // Update the display
+    if (selectedFiles.length === 0) {
+        filenameContainer.style.display = 'none';
+        filenameList.innerHTML = '';
+        return;
+    }
+    
+    // Show all selected filenames
+    filenameContainer.style.display = 'block';
+    filenameList.innerHTML = '';
+    selectedFiles.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.alignItems = 'center';
+        li.style.justifyContent = 'space-between';
+        li.style.marginBottom = '4px';
+        li.style.padding = '4px 0';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = file.name;
+        nameSpan.style.flex = '1';
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '×';
+        removeBtn.type = 'button';
+        removeBtn.style.background = '#d32f2f';
+        removeBtn.style.color = 'white';
+        removeBtn.style.border = 'none';
+        removeBtn.style.borderRadius = '50%';
+        removeBtn.style.width = '20px';
+        removeBtn.style.height = '20px';
+        removeBtn.style.cursor = 'pointer';
+        removeBtn.style.fontSize = '14px';
+        removeBtn.style.lineHeight = '1';
+        removeBtn.style.marginLeft = '8px';
+        removeBtn.onclick = function() {
+            // Remove this file from the list
+            selectedFiles = selectedFiles.filter((f, i) => i !== index);
+            
+            // Update the file input
+            const newDataTransfer = new DataTransfer();
+            selectedFiles.forEach(f => {
+                newDataTransfer.items.add(f);
+            });
+            fileInput.files = newDataTransfer.files;
+            
+            // Update display
+            if (selectedFiles.length === 0) {
+                filenameContainer.style.display = 'none';
+            }
+            // Trigger change event to update display
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        
+        li.appendChild(nameSpan);
+        li.appendChild(removeBtn);
+        filenameList.appendChild(li);
     });
 });
 </script>

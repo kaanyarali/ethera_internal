@@ -40,6 +40,10 @@ def get_product(product_id: str, db = Depends(get_db)):
 def create_product(product: schemas.ProductCreate, db = Depends(get_db)):
     doc_ref = db.collection("products").document()
     data = product.model_dump()
+    # Convert ProductType enum to string value for Firestore
+    if "product_type" in data and data["product_type"] is not None:
+        if hasattr(data["product_type"], "value"):
+            data["product_type"] = data["product_type"].value
     data["created_at"] = firestore.SERVER_TIMESTAMP
     doc_ref.set(data)
     doc = doc_ref.get()
@@ -54,6 +58,10 @@ def update_product(product_id: str, product: schemas.ProductUpdate, db = Depends
         raise HTTPException(status_code=404, detail="Product not found")
     
     update_data = product.model_dump(exclude_unset=True)
+    # Convert ProductType enum to string value for Firestore
+    if "product_type" in update_data and update_data["product_type"] is not None:
+        if hasattr(update_data["product_type"], "value"):
+            update_data["product_type"] = update_data["product_type"].value
     if update_data:
         doc_ref.update(update_data)
     
@@ -163,6 +171,85 @@ async def new_product_page(request: Request):
     return templates.TemplateResponse("product_form.html", {"request": request, "product": None})
 
 
+# Define delete-all route BEFORE {product_id} routes to ensure proper matching
+@html_router.post("/products/delete-all", response_class=HTMLResponse)
+async def delete_all_products_form(request: Request, db = Depends(get_db)):
+    """Delete all products and their related data (BOM lines, images)"""
+    try:
+        products_ref = db.collection("products")
+        products = products_ref.stream()
+        
+        deleted_count = 0
+        errors = []
+        
+        # Collect all product IDs first
+        product_ids = []
+        for product_doc in products:
+            if product_doc.exists:
+                product_ids.append(product_doc.id)
+        
+        # If no products, just redirect
+        if not product_ids:
+            return RedirectResponse(url="/products", status_code=303)
+        
+        # Delete each product and its related data
+        for product_id in product_ids:
+            try:
+                # Check if product exists
+                doc_ref = db.collection("products").document(product_id)
+                doc = doc_ref.get()
+                if not doc.exists:
+                    continue  # Skip if already deleted
+                
+                # Delete related BOM lines
+                bom_lines = db.collection("product_bom").where("product_id", "==", product_id).stream()
+                for bom_line in bom_lines:
+                    try:
+                        bom_line.reference.delete()
+                    except Exception as bom_error:
+                        print(f"Warning: Could not delete BOM line {bom_line.id}: {bom_error}")
+                
+                # Delete related images
+                images = db.collection("product_images").where("product_id", "==", product_id).stream()
+                for image in images:
+                    try:
+                        image_data = image.to_dict()
+                        if image_data and "image_url" in image_data:
+                            # Delete from storage if using GCS
+                            try:
+                                storage_client.delete_file(image_data["image_url"])
+                            except Exception as storage_error:
+                                print(f"Warning: Could not delete image from storage: {storage_error}")
+                        image.reference.delete()
+                    except Exception as image_error:
+                        print(f"Warning: Could not delete image {image.id}: {image_error}")
+                
+                # Delete product
+                doc_ref.delete()
+                deleted_count += 1
+                
+            except Exception as e:
+                error_msg = str(e)
+                # Don't treat "not found" as an error - product might have been deleted already
+                if "not found" not in error_msg.lower():
+                    errors.append(f"Product {product_id}: {error_msg}")
+                    print(f"Error deleting product {product_id}: {e}")
+                # Continue with other products even if one fails
+        
+        if errors:
+            print(f"Errors during bulk delete: {errors}")
+        
+        print(f"Successfully deleted {deleted_count} product(s)")
+        
+    except Exception as e:
+        print(f"Critical error in delete_all_products_form: {e}")
+        import traceback
+        traceback.print_exc()
+        # Still redirect even if there's an error
+    
+    return RedirectResponse(url="/products", status_code=303)
+
+
 @html_router.get("/products/{product_id}", response_class=HTMLResponse)
 async def product_detail_page(request: Request, product_id: str, db = Depends(get_db)):
     doc = db.collection("products").document(product_id).get()
@@ -223,14 +310,41 @@ async def product_detail_page(request: Request, product_id: str, db = Depends(ge
         if purchase:
             purchases.append(purchase)
     
-    # Get product images
+    # Get product images - fetch without order_by to avoid index requirement, then sort in Python
     images_ref = db.collection("product_images")
-    image_docs = images_ref.where("product_id", "==", product_id).order_by("order").order_by("created_at").stream()
+    image_docs = images_ref.where("product_id", "==", product_id).stream()
     product_images = []
+    print(f"Debug: Fetching images for product_id: {product_id}")
+    image_count = 0
     for image_doc in image_docs:
         image = document_to_dict(image_doc)
         if image:
+            image_count += 1
+            # Generate signed URL for the image if needed
+            original_url = image.get('image_url', '')
+            if original_url:
+                # Try to get signed URL for better access
+                signed_url = storage_client.get_signed_url(original_url)
+                image['image_url'] = signed_url
+            print(f"Debug: Found image {image_count}: id={image.get('id')}, url={image.get('image_url', 'N/A')[:80]}..., order={image.get('order', 'N/A')}")
             product_images.append(image)
+    print(f"Debug: Total images found: {len(product_images)}")
+    # Sort by order, then by created_at if order is the same (sorting in Python)
+    def sort_key(x):
+        order = x.get("order", 0)
+        created_at = x.get("created_at")
+        # Handle Firestore timestamp or datetime
+        if created_at:
+            if hasattr(created_at, 'timestamp'):
+                created_at_val = created_at.timestamp()
+            elif isinstance(created_at, datetime):
+                created_at_val = created_at.timestamp()
+            else:
+                created_at_val = 0
+        else:
+            created_at_val = 0
+        return (order, created_at_val)
+    product_images.sort(key=sort_key)
     
     return templates.TemplateResponse(
         "product_detail.html",
@@ -260,71 +374,176 @@ async def create_product_form(
     db = Depends(get_db)
 ):
     # Parse form data manually to handle multiple files
+    # Important: Use await request.form() to get multipart form data
     form = await request.form()
+    print(f"Debug: Form keys: {list(form.keys())}")
     
     sku = form.get("sku")
     name = form.get("name")
     description = form.get("description")
     count = int(form.get("count", 1))
+    collection_name = form.get("collection_name")
+    product_type = form.get("product_type")
     
     if not sku or not name:
         raise HTTPException(status_code=400, detail="SKU and name are required")
+    
+    # Convert product_type string to enum if provided
+    product_type_enum = None
+    if product_type and product_type.strip():
+        try:
+            from app.models import ProductType
+            product_type_enum = ProductType(product_type)
+        except ValueError:
+            # Invalid product type, ignore it
+            product_type_enum = None
     
     product = schemas.ProductCreate(
         sku=sku,
         name=name,
         description=description,
         image_url=None,  # No longer using image_url
-        count=count
+        count=count,
+        collection_name=collection_name if collection_name and collection_name.strip() else None,
+        product_type=product_type_enum
     )
     result = create_product(product, db)
     product_id = result['id']
     
     # Handle multiple image uploads
-    # When using HTML form with multiple attribute, files come as separate entries
-    # We need to iterate through all form entries to find all "images" fields
+    # FastAPI/Starlette: when multiple files have same name, they come as separate entries in multi_items()
     image_files = []
-    # Iterate through all form entries
-    for key, value in form.multi_items():
-        if key == "images" and isinstance(value, UploadFile):
-            if value.filename:  # Only add if file has a filename
-                image_files.append(value)
+    try:
+        # Method 1: Use multi_items() - this should return ALL entries including duplicates
+        form_items = list(form.multi_items())
+        print(f"Debug: Total form items: {len(form_items)}")
+        
+        # Count how many "images" entries we have
+        images_count = sum(1 for key, _ in form_items if key == "images")
+        print(f"Debug: Found {images_count} 'images' entries in form")
+        
+        # Collect all "images" entries - they should all be separate entries
+        for key, value in form_items:
+            if key == "images":
+                print(f"Debug: Found 'images' entry: type={type(value).__name__}, filename={getattr(value, 'filename', 'N/A')}")
+                # Check if it's an UploadFile instance
+                if isinstance(value, UploadFile):
+                    if value.filename and value.filename.strip():
+                        # IMPORTANT: Create a copy or store the file content immediately
+                        # because UploadFile can only be read once
+                        image_files.append(value)
+                        print(f"Debug: ✓ Added file: {value.filename}")
+                # Also check for file-like objects
+                elif hasattr(value, 'filename') and value.filename and value.filename.strip():
+                    image_files.append(value)
+                    print(f"Debug: ✓ Added file (hasattr): {value.filename}")
+        
+        # Method 2: If still only one file, try accessing form's internal structure
+        # Sometimes multiple files with same name get grouped
+        if len(image_files) == 1 and images_count > 1:
+            print(f"Debug: Only 1 file collected but {images_count} entries found - trying alternative method")
+            try:
+                # Try to access the raw multipart data
+                if hasattr(form, '_list'):
+                    print(f"Debug: form._list has {len(form._list)} items")
+                    for idx, item in enumerate(form._list):
+                        print(f"Debug: _list[{idx}]: name={getattr(item, 'name', 'N/A')}, type={type(item).__name__}")
+                        if hasattr(item, 'name') and item.name == "images":
+                            if hasattr(item, 'file') and item.file:
+                                if hasattr(item.file, 'filename') and item.file.filename:
+                                    if item.file not in image_files:
+                                        image_files.append(item.file)
+                                        print(f"Debug: ✓ Added file via _list: {item.file.filename}")
+            except Exception as e:
+                print(f"Debug: Could not access form._list: {e}")
+        
+        print(f"Debug: ✓ Total image files collected: {len(image_files)}")
+        if image_files:
+            print(f"Debug: Files: {[f.filename for f in image_files]}")
+    except Exception as e:
+        print(f"✗ Warning: Error parsing image files from form: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Upload images if provided
     if image_files:
-        images_ref = db.collection("product_images")
-        image_docs = images_ref.where("product_id", "==", product_id).stream()
-        max_order = -1
-        for image_doc in image_docs:
-            image_data = image_doc.to_dict()
-            if image_data and "order" in image_data:
-                max_order = max(max_order, image_data["order"])
-        
-        for idx, image_file in enumerate(image_files):
-            if image_file.filename:
-                # Read file content
-                file_content = await image_file.read()
-                
-                # Determine content type
-                content_type = image_file.content_type or "image/jpeg"
-                
-                # Upload to Firebase Storage
-                image_url = storage_client.upload_file(
-                    file_content, 
-                    image_file.filename, 
-                    content_type
-                )
-                
-                if image_url:
-                    # Create product image record
-                    doc_ref = db.collection("product_images").document()
-                    data = {
-                        "product_id": product_id,
-                        "image_url": image_url,
-                        "order": max_order + 1 + idx,
-                        "created_at": firestore.SERVER_TIMESTAMP
-                    }
-                    doc_ref.set(data)
+        print(f"Uploading {len(image_files)} image(s) for product {product_id} (SKU: {sku})")
+        uploaded_files = []
+        try:
+            images_ref = db.collection("product_images")
+            image_docs = images_ref.where("product_id", "==", product_id).stream()
+            max_order = -1
+            for image_doc in image_docs:
+                image_data = image_doc.to_dict()
+                if image_data and "order" in image_data:
+                    max_order = max(max_order, image_data["order"])
+            
+            for idx, image_file in enumerate(image_files):
+                try:
+                    if not image_file.filename or not image_file.filename.strip():
+                        print(f"⚠ Warning: Skipping file with empty filename at index {idx}")
+                        continue
+                    
+                    print(f"Debug: Processing image {idx + 1}/{len(image_files)}: {image_file.filename}")
+                    
+                    # Check if storage is available
+                    if not storage_client.bucket:
+                        print(f"⚠ Warning: Firebase Storage not configured. Skipping image upload for {image_file.filename}")
+                        print(f"Hint: Set FIREBASE_STORAGE_BUCKET in your .env file")
+                        continue
+                    
+                    # Read file content - IMPORTANT: Reset file pointer if needed
+                    # FastAPI UploadFile can only be read once, so we need to read it here
+                    try:
+                        # Reset to beginning if possible
+                        if hasattr(image_file.file, 'seek'):
+                            image_file.file.seek(0)
+                        file_content = await image_file.read()
+                        print(f"Debug: Read {len(file_content)} bytes from {image_file.filename}")
+                    except Exception as read_error:
+                        print(f"✗ Error reading file {image_file.filename}: {read_error}")
+                        continue
+                    
+                    # Determine content type
+                    content_type = image_file.content_type or "image/jpeg"
+                    print(f"Debug: Content type: {content_type}")
+                    
+                    # Upload to Firebase Storage - organize by SKU
+                    image_url = storage_client.upload_file(
+                        file_content, 
+                        image_file.filename, 
+                        content_type,
+                        sku=sku  # Pass SKU to organize files in subfolder
+                    )
+                    
+                    if image_url:
+                        # Create product image record
+                        doc_ref = db.collection("product_images").document()
+                        data = {
+                            "product_id": product_id,
+                            "image_url": image_url,
+                            "order": max_order + 1 + idx,
+                            "created_at": firestore.SERVER_TIMESTAMP
+                        }
+                        doc_ref.set(data)
+                        uploaded_files.append(image_file.filename)
+                        print(f"✓ Successfully uploaded and saved image {idx + 1}: {image_file.filename} -> {image_url}")
+                    else:
+                        print(f"⚠ Warning: upload_file returned None for {image_file.filename}")
+                except Exception as e:
+                    print(f"✗ Error uploading image {image_file.filename}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue with other images even if one fails
+                    continue
+            
+            if uploaded_files:
+                print(f"✓ Successfully uploaded {len(uploaded_files)} image(s): {', '.join(uploaded_files)}")
+        except Exception as e:
+            print(f"✗ Error processing images: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the entire product creation if images fail
     
     return RedirectResponse(url=f"/products/{product_id}", status_code=303)
 
@@ -338,6 +557,8 @@ async def update_product_form(
     description: str = Form(None),
     image_url: str = Form(None),
     count: int = Form(None),
+    collection_name: str = Form(None),
+    product_type: str = Form(None),
     db = Depends(get_db)
 ):
     update_data = {}
@@ -351,6 +572,19 @@ async def update_product_form(
         update_data["image_url"] = image_url
     if count is not None:
         update_data["count"] = count
+    if collection_name is not None:
+        update_data["collection_name"] = collection_name if collection_name.strip() else None
+    if product_type is not None:
+        # Convert product_type string to enum if provided
+        if product_type and product_type.strip():
+            try:
+                from app.models import ProductType
+                update_data["product_type"] = ProductType(product_type)
+            except ValueError:
+                # Invalid product type, set to None
+                update_data["product_type"] = None
+        else:
+            update_data["product_type"] = None
     
     product = schemas.ProductUpdate(**update_data)
     update_product(product_id, product, db)
@@ -524,6 +758,8 @@ async def export_products_excel(db = Depends(get_db)):
         "ID",
         "SKU",
         "Name",
+        "Collection Name",
+        "Product Type",
         "Description",
         "Count",
         "Image URL",
@@ -561,14 +797,32 @@ async def export_products_excel(db = Depends(get_db)):
         else:
             created_at_str = ""
         
+        # Format product type for display
+        product_type = product.get("product_type", "")
+        if product_type:
+            if product_type == "RING":
+                product_type_display = "Ring"
+            elif product_type == "NECKLACE":
+                product_type_display = "Necklace"
+            elif product_type == "EARRING":
+                product_type_display = "Earring"
+            elif product_type == "BRACELET":
+                product_type_display = "Bracelet"
+            else:
+                product_type_display = product_type
+        else:
+            product_type_display = ""
+        
         ws.cell(row=row_num, column=1, value=product["id"])
         ws.cell(row=row_num, column=2, value=product["sku"])
         ws.cell(row=row_num, column=3, value=product["name"])
-        ws.cell(row=row_num, column=4, value=product.get("description", "") or "")
-        ws.cell(row=row_num, column=5, value=product.get("count", 1))
-        ws.cell(row=row_num, column=6, value=product.get("image_url", "") or "")
-        ws.cell(row=row_num, column=7, value=created_at_str)
-        ws.cell(row=row_num, column=8, value=bom_count)
+        ws.cell(row=row_num, column=4, value=product.get("collection_name", "") or "")
+        ws.cell(row=row_num, column=5, value=product_type_display)
+        ws.cell(row=row_num, column=6, value=product.get("description", "") or "")
+        ws.cell(row=row_num, column=7, value=product.get("count", 1))
+        ws.cell(row=row_num, column=8, value=product.get("image_url", "") or "")
+        ws.cell(row=row_num, column=9, value=created_at_str)
+        ws.cell(row=row_num, column=10, value=bom_count)
     
     # Auto-adjust column widths
     for col in ws.columns:

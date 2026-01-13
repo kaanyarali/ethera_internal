@@ -114,6 +114,72 @@ async def delete_purchase_form(request: Request, purchase_id: str, db = Depends(
     return RedirectResponse(url="/purchases", status_code=303)
 
 
+# Define delete-all route BEFORE {purchase_id} routes to ensure proper matching
+@html_router.post("/purchases/delete-all", response_class=HTMLResponse)
+async def delete_all_purchases_form(request: Request, db = Depends(get_db)):
+    """Delete all purchases that are not referenced by BOM lines"""
+    try:
+        purchases_ref = db.collection("purchases")
+        purchases = purchases_ref.stream()
+        
+        deleted_count = 0
+        skipped_count = 0
+        errors = []
+        
+        # Collect all purchase IDs first
+        purchase_ids = []
+        for purchase_doc in purchases:
+            if purchase_doc.exists:
+                purchase_ids.append(purchase_doc.id)
+        
+        # If no purchases, just redirect
+        if not purchase_ids:
+            return RedirectResponse(url="/purchases", status_code=303)
+        
+        # Delete each purchase (only if not referenced by BOM lines)
+        for purchase_id in purchase_ids:
+            try:
+                # Check if purchase exists
+                doc_ref = db.collection("purchases").document(purchase_id)
+                doc = doc_ref.get()
+                if not doc.exists:
+                    continue  # Skip if already deleted
+                
+                # Check if any BOM lines reference this purchase
+                bom_lines = db.collection("product_bom").where("purchase_id", "==", purchase_id).stream()
+                bom_count = sum(1 for _ in bom_lines)
+                
+                if bom_count > 0:
+                    # Skip purchases that are referenced by BOM lines
+                    skipped_count += 1
+                    continue
+                
+                # Delete purchase
+                doc_ref.delete()
+                deleted_count += 1
+                
+            except Exception as e:
+                error_msg = str(e)
+                # Don't treat "not found" as an error - purchase might have been deleted already
+                if "not found" not in error_msg.lower():
+                    errors.append(f"Purchase {purchase_id}: {error_msg}")
+                    print(f"Error deleting purchase {purchase_id}: {e}")
+                # Continue with other purchases even if one fails
+        
+        if errors:
+            print(f"Errors during bulk delete: {errors}")
+        
+        print(f"Successfully deleted {deleted_count} purchase(s), skipped {skipped_count} (referenced by BOM lines)")
+        
+    except Exception as e:
+        print(f"Critical error in delete_all_purchases_form: {e}")
+        import traceback
+        traceback.print_exc()
+        # Still redirect even if there's an error
+    
+    return RedirectResponse(url="/purchases", status_code=303)
+
+
 @html_router.get("/purchases/new", response_class=HTMLResponse)
 async def new_purchase_page(request: Request, db = Depends(get_db)):
     materials_ref = db.collection("materials")

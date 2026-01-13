@@ -39,29 +39,36 @@ if not firebase_admin._apps:
         print(f"⚠ Firebase initialization error: {e}")
         print("⚠ App will start but Firestore operations may fail")
 
-# Get Firestore client - use specified database ID or default to "(default)"
+# Get Firestore client
+# Note: The 'database' parameter is not supported in google-cloud-firestore 2.14.0
+# It will use the default database. For multi-database support, upgrade to a newer version.
 database_id = os.getenv("FIRESTORE_DATABASE_ID", "(default)")
 db = None
 try:
-    db = firestore.client(database=database_id)
-    print(f"✓ Firestore client initialized (database: {database_id})")
+    # Try to initialize Firestore client (without database parameter for compatibility)
+    db = firestore.client()
+    if database_id != "(default)":
+        print(f"⚠ Note: Database ID '{database_id}' specified but not supported in this version")
+        print(f"⚠ Using default database. Upgrade google-cloud-firestore for multi-database support.")
+    print(f"✓ Firestore client initialized (using default database)")
 except Exception as e:
-    print(f"⚠ Firestore client initialization error: {e}")
-    print("⚠ Attempting to initialize without database ID...")
-    try:
-        db = firestore.client()
-        print("✓ Firestore client initialized with default database")
-    except Exception as e2:
-        print(f"⚠⚠⚠ CRITICAL: Firestore client initialization failed: {e2}")
-        print("⚠⚠⚠ App will start but database operations will fail!")
-        print("⚠⚠⚠ Check your GCP_PROJECT_ID and FIRESTORE_DATABASE_ID environment variables")
-        # Don't raise - let app start so we can see the error in logs
+    print(f"⚠⚠⚠ CRITICAL: Firestore client initialization failed: {e}")
+    print("⚠⚠⚠ App will start but database operations will fail!")
+    print("⚠⚠⚠ Check your GOOGLE_APPLICATION_CREDENTIALS and GCP_PROJECT_ID environment variables")
+    import traceback
+    traceback.print_exc()
+    # Don't raise - let app start so we can see the error in logs
 
 def get_db() -> Generator:
     """Firestore client dependency (replaces SQLAlchemy session)"""
     if db is None:
+        error_detail = "Database not initialized. "
+        if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+            error_detail += f"Check that GOOGLE_APPLICATION_CREDENTIALS points to a valid file: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS')}"
+        else:
+            error_detail += "GOOGLE_APPLICATION_CREDENTIALS environment variable is not set. Check your .env file or environment variables."
         raise HTTPException(
             status_code=503, 
-            detail="Database not initialized. Check Cloud Run logs for Firebase initialization errors."
+            detail=error_detail
         )
     yield db

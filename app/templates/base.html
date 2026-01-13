@@ -281,6 +281,50 @@
             background: #e5e5e5;
         }
         
+        /* Loading States */
+        .btn:disabled,
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        .btn.loading {
+            position: relative;
+            color: transparent;
+        }
+        
+        .btn.loading::after {
+            content: "";
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            top: 50%;
+            left: 50%;
+            margin-left: -8px;
+            margin-top: -8px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spinner 0.6s linear infinite;
+        }
+        
+        @keyframes spinner {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .btn-secondary.loading::after {
+            border-color: #1a1a1a;
+            border-top-color: transparent;
+        }
+        
+        .btn-danger.loading::after {
+            border-color: #d32f2f;
+            border-top-color: transparent;
+        }
+        
         /* Mobile Responsive Styles */
         @media (max-width: 768px) {
             .container {
@@ -504,5 +548,121 @@
             {% block content %}{% endblock %}
         </div>
     </div>
+    
+    <script>
+        // Global form submission handler - adds loading states to all buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle all forms
+            const forms = document.querySelectorAll('form');
+            forms.forEach(function(form) {
+                form.addEventListener('submit', function(e) {
+                    const submitButton = form.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        // Disable button and show loading state
+                        submitButton.disabled = true;
+                        submitButton.classList.add('loading');
+                        
+                        // Change button text to show processing
+                        const originalText = submitButton.textContent;
+                        submitButton.setAttribute('data-original-text', originalText);
+                        submitButton.textContent = 'Processing...';
+                        
+                        // If button has loading class, restore text after adding class
+                        // (since loading class makes text transparent)
+                        setTimeout(function() {
+                            if (submitButton.classList.contains('loading')) {
+                                submitButton.textContent = '';
+                            }
+                        }, 10);
+                    }
+                    
+                    // Also disable all other buttons in the form to prevent double submission
+                    const allButtons = form.querySelectorAll('button');
+                    allButtons.forEach(function(btn) {
+                        if (btn !== submitButton) {
+                            btn.disabled = true;
+                        }
+                    });
+                });
+            });
+            
+            // Handle standalone buttons that trigger actions (like delete buttons)
+            const actionButtons = document.querySelectorAll('button[onclick*="delete"], button[onclick*="confirm"]');
+            actionButtons.forEach(function(button) {
+                // Skip if button is inside a form (already handled above)
+                if (button.closest('form')) {
+                    return;
+                }
+                
+                button.addEventListener('click', function(e) {
+                    // Only add loading if it's a submit action
+                    if (button.type === 'submit' || button.onclick) {
+                        const originalText = button.textContent;
+                        button.disabled = true;
+                        button.classList.add('loading');
+                        button.setAttribute('data-original-text', originalText);
+                        button.textContent = 'Processing...';
+                        
+                        setTimeout(function() {
+                            if (button.classList.contains('loading')) {
+                                button.textContent = '';
+                            }
+                        }, 10);
+                    }
+                });
+            });
+            
+            // Handle export/download links
+            const exportLinks = document.querySelectorAll('a[href*="/export/"], a[href*="download"]');
+            exportLinks.forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    // Convert link to button-like appearance during loading
+                    const originalText = link.textContent;
+                    link.style.pointerEvents = 'none';
+                    link.style.opacity = '0.6';
+                    link.setAttribute('data-original-text', originalText);
+                    link.textContent = 'Processing...';
+                    
+                    // Reset after a delay (in case download doesn't trigger navigation)
+                    setTimeout(function() {
+                        if (link.textContent === 'Processing...') {
+                            link.textContent = originalText;
+                            link.style.pointerEvents = '';
+                            link.style.opacity = '1';
+                        }
+                    }, 5000);
+                });
+            });
+            
+            // Handle async delete functions (like deleteBOM)
+            // This will be handled by individual functions, but we can add a helper
+            window.showButtonLoading = function(button) {
+                if (!button) return;
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.classList.add('loading');
+                button.setAttribute('data-original-text', originalText);
+                button.textContent = 'Processing...';
+                
+                setTimeout(function() {
+                    if (button.classList.contains('loading')) {
+                        button.textContent = '';
+                    }
+                }, 10);
+            };
+            
+            window.hideButtonLoading = function(button) {
+                if (!button) return;
+                button.disabled = false;
+                button.classList.remove('loading');
+                const originalText = button.getAttribute('data-original-text');
+                if (originalText) {
+                    button.textContent = originalText;
+                }
+            };
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
 </body>
 </html>
