@@ -12,7 +12,7 @@ router = APIRouter()
 async def get_exchange_rate(base_currency: str, target_currency: str, date: datetime) -> tuple[float, bool]:
     """
     Get exchange rate for a given date.
-    Tries multiple free APIs for historical rates.
+    Uses Frankfurter API (https://api.frankfurter.dev) as primary source.
     Returns: (rate, is_from_api) tuple
     """
     if base_currency == target_currency:
@@ -20,7 +20,26 @@ async def get_exchange_rate(base_currency: str, target_currency: str, date: date
     
     date_str = date.strftime('%Y-%m-%d')
     
-    # Try exchangerate-api.com (free tier, no API key needed for basic usage)
+    # Try Frankfurter API first (primary source)
+    # API: https://api.frankfurter.dev/v1/{date}?base={base}&symbols={target}
+    # Response: {"amount":1.0,"base":"USD","date":"2015-12-24","rates":{"EUR":0.91349,"TRY":2.9223}}
+    try:
+        url = f"https://api.frankfurter.dev/v1/{date_str}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params={
+                "base": base_currency,
+                "symbols": target_currency
+            })
+            if response.status_code == 200:
+                data = response.json()
+                if "rates" in data and target_currency in data["rates"]:
+                    rate = float(data["rates"][target_currency])
+                    print(f"✓ Fetched rate from Frankfurter API: 1 {base_currency} = {rate} {target_currency} (date: {date_str})")
+                    return (rate, True)
+    except Exception as e:
+        print(f"⚠ Frankfurter API failed: {e}")
+    
+    # Try exchangerate-api.com as backup
     try:
         url = f"https://api.exchangerate-api.com/v4/historical/{base_currency}/{date_str}"
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -52,25 +71,6 @@ async def get_exchange_rate(base_currency: str, target_currency: str, date: date
                         return (rate, True)
     except Exception as e:
         print(f"⚠ exchangerate.host failed: {e}")
-    
-    # Try fixer.io free endpoint (no API key needed for limited usage)
-    try:
-        url = f"https://api.fixer.io/{date_str}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params={
-                "base": base_currency,
-                "symbols": target_currency
-            })
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("success") and "rates" in data:
-                    rates = data["rates"]
-                    if target_currency in rates:
-                        rate = float(rates[target_currency])
-                        print(f"✓ Fetched rate from fixer.io: 1 {base_currency} = {rate} {target_currency} (date: {date_str})")
-                        return (rate, True)
-    except Exception as e:
-        print(f"⚠ fixer.io failed: {e}")
     
     # All APIs failed - use fallback
     print(f"⚠ All APIs failed for {base_currency} to {target_currency} on {date_str}. Using fallback rate.")
