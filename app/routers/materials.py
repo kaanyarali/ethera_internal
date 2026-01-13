@@ -121,9 +121,17 @@ def delete_material(material_id: str, db = Depends(get_db)):
 
 # HTML routes
 @html_router.get("/materials", response_class=HTMLResponse)
-async def materials_page(request: Request, db = Depends(get_db)):
+async def materials_page(request: Request, page: int = 1, per_page: int = 10, db = Depends(get_db)):
+    # Calculate skip
+    skip = (page - 1) * per_page
+    
+    # Get total count
     materials_ref = db.collection("materials")
-    docs = materials_ref.order_by("name").stream()
+    total_docs = materials_ref.stream()
+    total_count = sum(1 for _ in total_docs)
+    
+    # Get paginated materials
+    docs = materials_ref.order_by("name").offset(skip).limit(per_page).stream()
     materials = []
     for doc in docs:
         material = document_to_dict(doc)
@@ -132,7 +140,41 @@ async def materials_page(request: Request, db = Depends(get_db)):
             if "type" not in material:
                 material["type"] = ""
             materials.append(material)
-    return templates.TemplateResponse("materials.html", {"request": request, "materials": materials})
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+    
+    # Generate page numbers for pagination (show current page ± 2, plus first and last)
+    page_numbers = []
+    if total_pages <= 7:
+        # Show all pages if 7 or fewer
+        page_numbers = list(range(1, total_pages + 1))
+    else:
+        # Show first page
+        page_numbers.append(1)
+        # Show pages around current
+        start = max(2, page - 2)
+        end = min(total_pages - 1, page + 2)
+        if start > 2:
+            page_numbers.append(None)  # Ellipsis marker
+        page_numbers.extend(range(start, end + 1))
+        if end < total_pages - 1:
+            page_numbers.append(None)  # Ellipsis marker
+        # Show last page
+        if total_pages > 1:
+            page_numbers.append(total_pages)
+    
+    return templates.TemplateResponse("materials.html", {
+        "request": request,
+        "materials": materials,
+        "page": page,
+        "per_page": per_page,
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "page_numbers": page_numbers
+    })
 
 
 @html_router.get("/materials/new", response_class=HTMLResponse)

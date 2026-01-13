@@ -90,9 +90,17 @@ def delete_purchase(purchase_id: str, db = Depends(get_db)):
 
 # HTML routes
 @html_router.get("/purchases", response_class=HTMLResponse)
-async def purchases_page(request: Request, db = Depends(get_db)):
+async def purchases_page(request: Request, page: int = 1, per_page: int = 10, db = Depends(get_db)):
+    # Calculate skip
+    skip = (page - 1) * per_page
+    
+    # Get total count
     purchases_ref = db.collection("purchases")
-    docs = purchases_ref.order_by("purchase_date", direction=firestore.Query.DESCENDING).stream()
+    total_docs = purchases_ref.stream()
+    total_count = sum(1 for _ in total_docs)
+    
+    # Get paginated purchases
+    docs = purchases_ref.order_by("purchase_date", direction=firestore.Query.DESCENDING).offset(skip).limit(per_page).stream()
     purchases = []
     for doc in docs:
         purchase = document_to_dict(doc)
@@ -105,7 +113,41 @@ async def purchases_page(request: Request, db = Depends(get_db)):
             else:
                 purchase["material_name"] = "Unknown"
             purchases.append(purchase)
-    return templates.TemplateResponse("purchases.html", {"request": request, "purchases": purchases})
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+    
+    # Generate page numbers for pagination (show current page ± 2, plus first and last)
+    page_numbers = []
+    if total_pages <= 7:
+        # Show all pages if 7 or fewer
+        page_numbers = list(range(1, total_pages + 1))
+    else:
+        # Show first page
+        page_numbers.append(1)
+        # Show pages around current
+        start = max(2, page - 2)
+        end = min(total_pages - 1, page + 2)
+        if start > 2:
+            page_numbers.append(None)  # Ellipsis marker
+        page_numbers.extend(range(start, end + 1))
+        if end < total_pages - 1:
+            page_numbers.append(None)  # Ellipsis marker
+        # Show last page
+        if total_pages > 1:
+            page_numbers.append(total_pages)
+    
+    return templates.TemplateResponse("purchases.html", {
+        "request": request,
+        "purchases": purchases,
+        "page": page,
+        "per_page": per_page,
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "page_numbers": page_numbers
+    })
 
 
 @html_router.post("/purchases/{purchase_id}/delete", response_class=HTMLResponse)

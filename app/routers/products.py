@@ -155,15 +155,57 @@ def delete_bom_line(bom_id: str, db = Depends(get_db)):
 
 # HTML routes
 @html_router.get("/products", response_class=HTMLResponse)
-async def products_page(request: Request, db = Depends(get_db)):
+async def products_page(request: Request, page: int = 1, per_page: int = 10, db = Depends(get_db)):
+    # Calculate skip
+    skip = (page - 1) * per_page
+    
+    # Get total count
     products_ref = db.collection("products")
-    docs = products_ref.order_by("created_at", direction=firestore.Query.DESCENDING).stream()
+    total_docs = products_ref.stream()
+    total_count = sum(1 for _ in total_docs)
+    
+    # Get paginated products
+    docs = products_ref.order_by("created_at", direction=firestore.Query.DESCENDING).offset(skip).limit(per_page).stream()
     products = []
     for doc in docs:
         product = document_to_dict(doc)
         if product:
             products.append(product)
-    return templates.TemplateResponse("products.html", {"request": request, "products": products})
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+    
+    # Generate page numbers for pagination (show current page ± 2, plus first and last)
+    page_numbers = []
+    if total_pages <= 7:
+        # Show all pages if 7 or fewer
+        page_numbers = list(range(1, total_pages + 1))
+    else:
+        # Show first page
+        page_numbers.append(1)
+        # Show pages around current
+        start = max(2, page - 2)
+        end = min(total_pages - 1, page + 2)
+        if start > 2:
+            page_numbers.append(None)  # Ellipsis marker
+        page_numbers.extend(range(start, end + 1))
+        if end < total_pages - 1:
+            page_numbers.append(None)  # Ellipsis marker
+        # Show last page
+        if total_pages > 1:
+            page_numbers.append(total_pages)
+    
+    return templates.TemplateResponse("products.html", {
+        "request": request,
+        "products": products,
+        "page": page,
+        "per_page": per_page,
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "page_numbers": page_numbers
+    })
 
 
 @html_router.get("/products/new", response_class=HTMLResponse)

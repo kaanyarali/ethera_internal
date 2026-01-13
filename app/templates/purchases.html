@@ -52,6 +52,38 @@
         {% endfor %}
     </tbody>
 </table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if has_prev %}
+    <a href="/purchases?page={{ page - 1 }}&per_page={{ per_page }}" class="pagination-btn">‹ Previous</a>
+    {% else %}
+    <span class="pagination-btn disabled">‹ Previous</span>
+    {% endif %}
+    
+    {% for p in page_numbers %}
+        {% if p is none %}
+        <span class="pagination-btn" style="border: none; cursor: default; background: transparent;">...</span>
+        {% elif p == page %}
+        <span class="pagination-btn active">{{ p }}</span>
+        {% else %}
+        <a href="/purchases?page={{ p }}&per_page={{ per_page }}" class="pagination-btn">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    
+    {% if has_next %}
+    <a href="/purchases?page={{ page + 1 }}&per_page={{ per_page }}" class="pagination-btn">Next ›</a>
+    {% else %}
+    <span class="pagination-btn disabled">Next ›</span>
+    {% endif %}
+    
+    <span class="pagination-info">Showing {{ (page - 1) * per_page + 1 }}-{% if page * per_page > total_count %}{{ total_count }}{% else %}{{ page * per_page }}{% endif %} of {{ total_count }}</span>
+</div>
+{% elif total_count > 0 %}
+<div class="pagination">
+    <span class="pagination-info">Showing all {{ total_count }} items</span>
+</div>
+{% endif %}
 {% else %}
 <div class="empty-state">
     <p>No purchases found.</p>

@@ -6,17 +6,20 @@
 <div class="page-header">
     <div>
         <h1>{{ product.name }}</h1>
-        <p class="meta">
-            SKU: {{ product.sku }} • 
-            {% if product.collection_name %}Collection: {{ product.collection_name }} • {% endif %}
+        <p class="meta" style="word-wrap: break-word; word-break: break-word; overflow-wrap: break-word; line-height: 1.6;">
+            <span style="display: block; margin-bottom: 4px;">SKU: {{ product.sku }}</span>
+            {% if product.collection_name %}<span style="display: block; margin-bottom: 4px;">Collection: {{ product.collection_name }}</span>{% endif %}
             {% if product.product_type %}
+            <span style="display: block; margin-bottom: 4px;">
                 Type: {% if product.product_type == 'RING' %}Ring
                 {% elif product.product_type == 'NECKLACE' %}Necklace
                 {% elif product.product_type == 'EARRING' %}Earring
                 {% elif product.product_type == 'BRACELET' %}Bracelet
-                {% else %}{{ product.product_type }}{% endif %} • 
+                {% else %}{{ product.product_type }}{% endif %}
+            </span>
             {% endif %}
-            Count: {{ product.count or 1 }} • Created {{ product.created_at.strftime('%Y-%m-%d') }}
+            <span style="display: block; margin-bottom: 4px;">Count: {{ product.count or 1 }}</span>
+            <span style="display: block;">Created: {{ product.created_at.strftime('%Y-%m-%d') }}</span>
         </p>
     </div>
     <div class="page-header-actions" style="display: flex; gap: 12px;">
